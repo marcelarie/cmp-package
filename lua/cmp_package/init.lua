@@ -19,6 +19,30 @@ function source:is_available()
 	return true
 end
 
+local function jq(d, its_repo, callback)
+	local args = its_repo and ".items[].name" or ".items[].login"
+	Job
+		:new({
+			command = "jq",
+			args = { args },
+			writer = d:result(),
+			on_exit = function(job)
+				local res = job:result()
+
+				if not res then
+					return callback({})
+				end
+
+				local packs = {}
+				for _, name in ipairs(res) do
+					table.insert(packs, { label = name, insertText = name })
+				end
+				callback(packs)
+			end,
+		})
+		:start()
+end
+
 ---Invoke completion (required).
 ---  If you want to abort completion, just call the callback without arguments.
 ---@param request  cmp.CompletionRequest
@@ -37,31 +61,15 @@ function source:complete(request, callback)
 		return callback({})
 	end
 
-	local url = its_repo and string.format("https://api.github.com/search/repositories?q=%s&per_page=10", query)
-		or string.format("https://api.github.com/search/users?q=%s&per_page=10", query)
+	local url = its_repo and string.format("https://api.github.com/search/repositories?q=%s", query)
+		or string.format("https://api.github.com/search/users?q=%s", query)
 
 	Job
 		:new({
 			command = "curl",
 			args = { url },
-		} .. {
-			command = "jq",
-			args = { "'.items'" }, -- , "curl", "|", "jq", "'.items'" },
 			on_exit = function(job)
-				local res = job:result()
-				print(vim.inspect(res))
-				-- local tab = vim.json.decode(res.body)
-				--
-				-- if not tab or not tab.items then
-				-- 	return callback({})
-				-- end
-				--
-				-- local packs = {}
-				-- for _, pack in ipairs(tab.items) do
-				-- 	local name = its_repo and pack.full_name or pack.html_url
-				-- 	table.insert(packs, { label = name, insertText = name })
-				-- end
-				-- callback(packs)
+				callback(jq(job, its_repo, callback))
 			end,
 		})
 		:start()
